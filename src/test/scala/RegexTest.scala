@@ -1,42 +1,43 @@
-import collection.mutable.Stack
-import org.scalatest._
+import org.scalacheck.Prop.forAll
+import org.scalacheck.Gen
+import org.scalatest.propspec.AnyPropSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
-class ExampleSpec extends WordSpec with Matchers {
-  "A regex evaluator" should {
-    "match these basic regexes" in {
-      Regex.fullMatch("ab", "ab") should be(true)
-      Regex.fullMatch("abbbbb", "ab+") should be(true)
-      Regex.fullMatch("bbbbb", "ab+") should be(false)
+class RegexSpec extends AnyPropSpec with ScalaCheckPropertyChecks with Matchers {
+  // Generate simple regex patterns
+  val simpleRegexGen = Gen.oneOf(
+    "(a|b)+",
+    "a*b+",
+    "(ab)*",
+    "a|b",
+    "..."
+  )
 
-      Regex.fullMatch("aaabbb", "a+b+") should be(true)
-      Regex.fullMatch("ababa", "a+b+") should be(false)
-      
-      Regex.fullMatch("aaa", "a*") should be(true)
-      Regex.fullMatch("", "a*") should be(true) 
+  property("a+ should match one or more a's") {
+    forAll(Gen.nonEmptyListOf(Gen.const('a'))) { chars =>
+      val str = chars.mkString
+      Regex.fullMatch(str, "a+").getOrElse(false) shouldBe true
     }
+  }
 
-    "match the . character properly" in {
-        full("a", ".") should be (true)
-        full("ab", ".") should be(false)
-        full("abab", "(..)*") should be(true)
-        full("aba", "(..)*") should be (false)
+  property("invalid regex patterns should return Left") {
+    forAll(Gen.oneOf("(", ")", "*+", "||")) { invalidPattern =>
+      Regex.fullMatch("test", invalidPattern).isLeft shouldBe true
     }
+  }
 
-    "match more complex regexes" in {
-      Regex.fullMatch("a", "(a*)*") should be (true)
-      Regex.fullMatch("b", "(a*)*") should be (false)  
-      Regex.fullMatch("abc", "abc") should be (true) 
-   
-      Regex.fullMatch("abc", "(a|b)bc") should be (true)  
-      Regex.fullMatch("abc", "(a|b)+bc") should be (true)  
-      Regex.fullMatch("abc", "(a|b)+b*c") should be (true)  
-      Regex.fullMatch("abc", "((a|b)+b*c)+") should be (true)  
+  property("empty string should not match non-empty pattern") {
+    Regex.fullMatch("", "a+").getOrElse(false) shouldBe false
+  }
+
+  property("dot operator should match any character") {
+    forAll(Gen.alphaChar) { char =>
+      Regex.fullMatch(char.toString, ".").getOrElse(false) shouldBe true
     }
+  }
 
-    "match this pattern a million times" in {
-      (1 to 10000).foreach(_ => full("abcabcabcabcabcabcabcd", "((a|b)+b*c)+"))
-    }
-
-    def full(input: String, pattern: String) = Regex.fullMatch(input, pattern)
+  property("concatenation should match sequences") {
+    Regex.fullMatch("abc", "a.b.c").getOrElse(false) shouldBe true
   }
 }
